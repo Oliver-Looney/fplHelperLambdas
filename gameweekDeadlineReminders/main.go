@@ -28,7 +28,25 @@ func getFPLGameweekData() (*fplBootstrapResponse, error) {
 }
 
 func generateSMSContents(gameweek gameweekData) string {
-	return gameweek.Name + " Deadline is in " + strconv.FormatInt((gameweek.DeadlineTimeEpoch-time.Now().Unix())/86400, 10) + " days and " + strconv.FormatInt((gameweek.DeadlineTimeEpoch-time.Now().Unix()%86400)/3600, 10) + " hours"
+	return gameweek.Name +
+		" Deadline is in " +
+		strconv.FormatInt(getDaysFromEpochTime(gameweek), 10) +
+		" days and " + strconv.FormatInt(getHoursFromEpochTime(gameweek), 10) +
+		" hours\n" +
+		"Deadline: " +
+		string(gameweek.DeadlineTime.Weekday()) +
+		" " +
+		string(gameweek.DeadlineTime.Hour()) +
+		":" +
+		string(gameweek.DeadlineTime.Minute())
+}
+
+func getDaysFromEpochTime(gameweek gameweekData) int64 {
+	return (gameweek.DeadlineTimeEpoch - time.Now().Unix()) / 86400
+}
+
+func getHoursFromEpochTime(gameweek gameweekData) int64 {
+	return ((gameweek.DeadlineTimeEpoch - time.Now().Unix()) % 86400) / 3600
 }
 
 type MyEvent struct {
@@ -43,6 +61,9 @@ func HandleRequest(ctx context.Context, name MyEvent) {
 	i := 0
 	for !fplGameweekData.Events[i].IsNext {
 		i++
+	}
+	if getDaysFromEpochTime(fplGameweekData.Events[i]) > 3 {
+		return
 	}
 	sess := session.Must(session.NewSession())
 
