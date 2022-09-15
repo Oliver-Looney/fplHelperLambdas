@@ -49,17 +49,17 @@ func generateSMSContents(gameweek gameweekData, teamData []teamData) string {
 		strconv.FormatInt(getDaysFromEpochTime(gameweek), 10) +
 		" days and " + strconv.FormatInt(getHoursFromEpochTime(gameweek), 10) +
 		" hours" +
-		checkGameWeeksFixturesAndSummaries(gameweek.ID, teamData) +
-		checkGameWeeksFixturesAndSummaries(gameweek.ID+1, teamData)
+		checkGameWeeksFixturesAndSummarize(gameweek.ID, teamData) +
+		checkGameWeeksFixturesAndSummarize(gameweek.ID+1, teamData)
 }
 
-func checkGameWeeksFixturesAndSummaries(gameweekID int, teamData []teamData) string {
+func checkGameWeeksFixturesAndSummarize(gameweekID int, teamData []teamData) string {
 	fixturesCurr, err := getFPLGameweekFixturesData(gameweekID)
 	if err != nil {
 		fmt.Println(err)
 	}
 	fixturesAsMapCurr := fixturesListToMap(*fixturesCurr)
-	return checkForTeamsNotPlaying(fixturesAsMapCurr, gameweekID, teamData) + checkForTeamsPlayingMultiple(fixturesAsMapCurr, gameweekID, teamData)
+	return checkForTeamsNotPlayingOnce(fixturesAsMapCurr, gameweekID, teamData, "teams not playing in gameweek", testForZeroGames) + checkForTeamsNotPlayingOnce(fixturesAsMapCurr, gameweekID, teamData, "teams are playing multiple times in gameweek", testForMultipleGames)
 }
 
 func getDaysFromEpochTime(gameweek gameweekData) int64 {
@@ -113,43 +113,38 @@ func fixturesListToMap(fixtures gameweekFixtures) map[int]int {
 	return teamsNumberOfGames
 }
 
-func checkForTeamsNotPlaying(mapOfTeamsGames map[int]int, gameweek int, teamData []teamData) string {
+type fn func(map[int]int, int, bool, []string, []teamData) (bool, []string)
+
+func checkForTeamsNotPlayingOnce(mapOfTeamsGames map[int]int, gameweek int, teamData []teamData, message string, testCase fn) string {
 	if gameweek > 38 {
 		return ""
 	}
-	teamsNotPlaying := make([]string, 0)
+	teamsToNote := make([]string, 0)
 	flag := false
 	for i := 1; i <= 20; i++ {
-		if mapOfTeamsGames[i] < 1 {
-			flag = true
-			teamsNotPlaying = append(teamsNotPlaying, teamData[i-1].Name)
-		}
+		flag, teamsToNote = testCase(mapOfTeamsGames, i, flag, teamsToNote, teamData)
 	}
 	if flag {
-		return fmt.Sprintf("\n%d teams not playing in gameweek %d: %s", len(teamsNotPlaying), gameweek, strings.Join(teamsNotPlaying[:], ", "))
+		return fmt.Sprintf("\n%d %s %d: %s", len(teamsToNote), message, gameweek, strings.Join(teamsToNote[:], ", "))
 	} else {
 		return ""
 	}
 }
 
-func checkForTeamsPlayingMultiple(mapOfTeamsGames map[int]int, gameweek int, teamData []teamData) string {
-	if gameweek > 38 {
-		return ""
+func testForMultipleGames(mapOfTeamsGames map[int]int, i int, flag bool, teamsPlayingMultiple []string, teamData []teamData) (bool, []string) {
+	if mapOfTeamsGames[i] > 1 {
+		flag = true
+		teamsPlayingMultiple = append(teamsPlayingMultiple, teamData[i-1].Name)
 	}
-	teamsPlayingMultiple := make([]string, 0)
-	flag := false
-	for i := 1; i <= 20; i++ {
-		if mapOfTeamsGames[i] > 1 {
-			//result += fmt.Sprintf("%s playing %d times in gameweek %d, ", teamData[i-1].Name, mapOfTeamsGames[i], gameweek)
-			flag = true
-			teamsPlayingMultiple = append(teamsPlayingMultiple, teamData[i-1].Name)
-		}
+	return flag, teamsPlayingMultiple
+}
+
+func testForZeroGames(mapOfTeamsGames map[int]int, i int, flag bool, teamsNotPlaying []string, teamData []teamData) (bool, []string) {
+	if mapOfTeamsGames[i] < 1 {
+		flag = true
+		teamsNotPlaying = append(teamsNotPlaying, teamData[i-1].Name)
 	}
-	if flag {
-		return fmt.Sprintf("\n%d teams are playing multiple times in gameweek %d: %s", len(teamsPlayingMultiple), gameweek, strings.Join(teamsPlayingMultiple[:], ", "))
-	} else {
-		return ""
-	}
+	return flag, teamsNotPlaying
 }
 
 func main() {
